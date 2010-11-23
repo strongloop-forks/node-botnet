@@ -1,6 +1,6 @@
 var assert = require('assert');
 var util = require('util')
-var Parser = require('./frame-protocol').Parser;
+var Parser = require('../lib/frame-protocol').Parser;
 
 function test1 () {
   console.error("test 1");
