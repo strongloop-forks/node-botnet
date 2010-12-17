@@ -3,8 +3,7 @@ var path = require('path');
 var fs = require('fs');
 var util = require('util');
 var EventEmitter = require('events').EventEmitter;
-
-var PORT = 6888;
+var protocol = require('../lib/frame-protocol');
 
 
 function Bot() {
@@ -28,8 +27,6 @@ Bot.prototype.loadConfig = function(dir) {
     throw new Error('loadConfig() can only be called ' +
                     'directly after constructing a bot');
   }
-
-  console.error("dir: %s", dir);
 
   var keyFilename = path.join(dir, 'key.pem');
   var certFilename = path.join(dir, 'cert.pem');
@@ -86,19 +83,59 @@ Bot.prototype.listen = function(port) {
 };
 
 
-Bot.prototype.connect = function(port) {
+Bot.prototype.connect = function(port, cb) {
   var options = {
     key: this.key,
     cert: this.cert,
     ca: this.caCert
   };
 
-  var client = tls.connect(port, options, function () {
-    console.error("connected");
+  var client = this.client = tls.connect(port, options, function () {
+    if (!client.authorized) {
+      console.error("unauthorized connect. destroying it.");
+      client.destroy();
+    } else {
+      client.parser = protocol.Parser();
+
+      client.on('data', function (d) {
+        client.parser.execute(d);
+      });
+
+      client.parser.on('message', function (msg) {
+        self.emit('msg', msg);
+      });
+
+      client.parser.on('upgrade', function (type, firstChunk) {
+        // do something
+      });
+
+      if (cb) cb();
+    }
   });
 };
 
 
+Bot.prototype.send = function(m) {
+  this.client.write(protocol.serialize(m));
+};
+
+
 Bot.prototype._handleConnection = function(c) {
+  var self = this;
+
   console.error("connection!");
+
+  c.parser = protocol.Parser();
+
+  c.on('data', function (d) {
+    c.parser.execute(d);
+  });
+
+  c.parser.on('message', function (msg) {
+    self.emit('msg', msg);
+  });
+
+  c.parser.on('upgrade', function (type, firstChunk) {
+    // do something
+  });
 };
