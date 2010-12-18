@@ -1,5 +1,5 @@
-var botnet = require('./botnet');
-var bot = botnet.createBot(__dirname + '/keys/agent2-keys');
+var botnet = require('../../lib/botnet');
+var bot = botnet.createBot(__dirname + '../../../test/keys/agent2-keys');
 
 bot.listen(8123);
 
