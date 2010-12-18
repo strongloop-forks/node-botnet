@@ -6,12 +6,43 @@ var EventEmitter = require('events').EventEmitter;
 var protocol = require('../lib/frame-protocol');
 
 
+function Peer(bot, sessionId, connection) {
+  if (!(this instanceof Peer)) return new Peer(bot, sessionId, connection);
+  EventEmitter.call(this);
+
+  this.bot = bot;
+  this.sessionId = sessionId;
+
+  this.connection = connection;
+  connection.state = 'ok';
+  connection.peer = this;
+  this.cert = connection.getPeerCertificate();
+}
+util.inherits(Peer, EventEmitter);
+
+
+Peer.prototype.send = function(message) {
+  if (this.connection) {
+    this.connection.write(protocol.serialize(message));
+  }
+};
+
+
+Peer.prototype.disconnect = function() {
+  this.bot.peers[this.sessionId] = undefined;
+  this.bot.emit("disconnect", this);
+};
+
+
 function Bot() {
   if (!(this instanceof Bot)) return new Bot();
   EventEmitter.call(this);
 
   this.state = 'loading';
   this.peers = [];
+
+  // Choose a large random number. Used to uniquely identify a bot session.
+  this.sessionId = Math.round(Math.random() * 999999999999);
 }
 util.inherits(Bot, EventEmitter);
 
@@ -70,13 +101,12 @@ Bot.prototype.listen = function(port) {
 
   var self = this;
 
-  this.server = tls.createServer(this.tlsOptions, function (c) {
-    self._handleConnection(c);
+  this.server = tls.createServer(this.tlsOptions, function (connection) {
+    self.initPeerConnection(connection);
   });
 
 
   this.server.listen(port, function () {
-    console.error("listening");
     self.state = 'listening';
     self.address = self.server.address();
     self.emit('listening');
@@ -93,53 +123,79 @@ Bot.prototype.connect = function(port, cb) {
 
   var self = this;
 
-  var peer = tls.connect(port, options, function () {
-    self._addPeer(peer);
-    if (cb) cb();
-  });
-};
-
-
-Bot.prototype._addPeer = function(peer) {
-  if (!peer.authorized) {
-    console.error("unauthorized connect. destroying it.");
-    peer.destroy();
-    return;
-  }
-
-  var self = this;
-
-  this.peers.push(peer);
-
-  peer.parser = protocol.Parser();
-
-  peer.on('data', function (d) {
-    peer.parser.execute(d);
-  });
-
-  peer.parser.on('message', function (msg) {
-    self.emit('msg', msg);
-  });
-
-  peer.parser.on('upgrade', function (type, firstChunk) {
-    // do something
-  });
-
-  peer.on('end', function () {
-    // Remove from peers array.
-    var i = self.peers.indexOf(peer);
-    self.peers.splice(i, 1);
+  var connection = tls.connect(port, options, function () {
+    self.initPeerConnection(connection);
+    self.once('peerConnect', cb);
   });
 };
 
 
 Bot.prototype.broadcast = function(m) {
-  for (var i = 0; i < this.peers.length; i++) {
-    this.peers[i].write(protocol.serialize(m));
+  for (var sessionId in this.peers) {
+    if (this.peers[sessionId]) {
+      this.peers[sessionId].send(m);
+    }
   }
 };
 
 
-Bot.prototype._handleConnection = function(peer) {
-  this._addPeer(peer);
+Bot.prototype.initPeerConnection = function(connection, isServer) {
+  if (!connection.authorized) {
+    console.error('unauthorized connect. destroying it.');
+    connection.destroy();
+    return false;
+  }
+
+  var self = this
+
+  connection.write(protocol.serialize({ sessionId: this.sessionId }));
+  connection.state = 'sessionIdWait';
+
+  connection.parser = protocol.Parser();
+
+  connection.on('data', function (d) {
+    connection.parser.execute(d);
+  });
+
+  connection.parser.on('message', function (msg) {
+    self._handleMessage(connection, msg);
+  });
+
+  connection.parser.on('upgrade', function (type, firstChunk) {
+    // do something
+  });
+
+  connection.on('end', function () {
+    if (connection.peer) {
+      connection.peer.disconnect();
+    }
+  });
+
+  return true;
 };
+
+
+Bot.prototype._newPeer = function(sessionId, connection) {
+  var peer = Peer(this, sessionId, connection);
+  this.peers[sessionId] = peer;
+  this.emit('peerConnect', peer);
+  return peer;
+};
+
+
+Bot.prototype._handleMessage = function(connection, message) {
+  if (connection.state == 'sessionIdWait' ) {
+    // The first message must contain sessionId
+    if (!message.sessionId) {
+      connection.destroy();
+      return;
+    }
+
+    this._newPeer(message.sessionId, connection);
+  } else {
+    this.emit('message', message, connection.peer);
+    connection.peer.emit('message', message);
+  }
+};
+
+
