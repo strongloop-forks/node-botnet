@@ -11,6 +11,7 @@ function Bot() {
   EventEmitter.call(this);
 
   this.state = 'loading';
+  this.peers = [];
 }
 util.inherits(Bot, EventEmitter);
 
@@ -90,52 +91,55 @@ Bot.prototype.connect = function(port, cb) {
     ca: this.caCert
   };
 
-  var client = this.client = tls.connect(port, options, function () {
-    if (!client.authorized) {
-      console.error("unauthorized connect. destroying it.");
-      client.destroy();
-    } else {
-      client.parser = protocol.Parser();
-
-      client.on('data', function (d) {
-        client.parser.execute(d);
-      });
-
-      client.parser.on('message', function (msg) {
-        self.emit('msg', msg);
-      });
-
-      client.parser.on('upgrade', function (type, firstChunk) {
-        // do something
-      });
-
-      if (cb) cb();
-    }
-  });
-};
-
-
-Bot.prototype.send = function(m) {
-  this.client.write(protocol.serialize(m));
-};
-
-
-Bot.prototype._handleConnection = function(c) {
   var self = this;
 
-  console.error("connection!");
+  var peer = tls.connect(port, options, function () {
+    self._addPeer(peer);
+    if (cb) cb();
+  });
+};
 
-  c.parser = protocol.Parser();
 
-  c.on('data', function (d) {
-    c.parser.execute(d);
+Bot.prototype._addPeer = function(peer) {
+  if (!peer.authorized) {
+    console.error("unauthorized connect. destroying it.");
+    peer.destroy();
+    return;
+  }
+
+  var self = this;
+
+  this.peers.push(peer);
+
+  peer.parser = protocol.Parser();
+
+  peer.on('data', function (d) {
+    peer.parser.execute(d);
   });
 
-  c.parser.on('message', function (msg) {
+  peer.parser.on('message', function (msg) {
     self.emit('msg', msg);
   });
 
-  c.parser.on('upgrade', function (type, firstChunk) {
+  peer.parser.on('upgrade', function (type, firstChunk) {
     // do something
   });
+
+  peer.on('end', function () {
+    // Remove from peers array.
+    var i = self.peers.indexOf(peer);
+    self.peers.splice(i, 1);
+  });
+};
+
+
+Bot.prototype.broadcast = function(m) {
+  for (var i = 0; i < this.peers.length; i++) {
+    this.peers[i].write(protocol.serialize(m));
+  }
+};
+
+
+Bot.prototype._handleConnection = function(peer) {
+  this._addPeer(peer);
 };
