@@ -2,49 +2,44 @@ var botnet = require('../lib/botnet');
 var assert = require('assert');
 
 var gotMessage = false;
-var clientBot;
+var botY;
 
-var serverBot = botnet.createBot(__dirname + '/keys/agent2-keys');
+var botX = botnet.createBot(__dirname + '/keys/agent2-keys');
 
-serverBot.on('message', function (message, peer) {
+botX.on('message', function (message, peer) {
   console.error("msg: %j", message);
   assert.equal('hello world', message.msg);
   gotMessage = true;
-
-  /*
-  serverBot.close();
-  clientBot.close();
-  */
-
 });
 
 
-setTimeout(function () {
-  var cs = clientBot._state();
-  var ss = serverBot._state();
-  console.log(cs);
-  console.log(ss);
-
-  assert.deepEqual(cs, ss);
-
-  serverBot.close();
-  clientBot.close();
-}, 500);
-
-serverBot.on('peerConnect', function (peer) {
+botX.on('peerConnect', function (peer) {
   console.log("connection: %d\n%j", peer.sessionId, peer.cert);
 });
 
 
-serverBot.on('listening', function () {
-  clientBot = botnet.createBot(__dirname + '/keys/agent1-keys');
+botX.on('listening', function () {
+  botY = botnet.createBot(__dirname + '/keys/agent1-keys');
 
-  clientBot.connect(8123, function (peer) {
+  botY.connect(botnet.defaultPort, function (peer) {
     console.log("connected: %d\n%j", peer.sessionId, peer.cert);
     peer.send({ msg: "hello world" });
     console.error("message sent");
   });
 });
+
+
+setTimeout(function () {
+  var ys = botY._state();
+  var xs = botX._state();
+  console.log(ys);
+  console.log(xs);
+
+  assert.deepEqual(xs, ys);
+
+  botX.close();
+  botY.close();
+}, 500);
 
 
 process.on('exit', function () {
