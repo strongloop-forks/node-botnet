@@ -22,7 +22,7 @@ botX.on('listening', function () {
   botY = botnet.createBot(__dirname + '/keys/agent1-keys');
 
   botY.connect(botnet.defaultPort, function (peer) {
-    console.log("connected: %d\n%j", peer.sessionId, peer.cert);
+    console.log("connected: %d", peer.sessionId);
     peer.send({ msg: "hello world" });
     console.error("message sent");
   });
@@ -30,12 +30,17 @@ botX.on('listening', function () {
 
 
 setTimeout(function () {
-  var ys = botY._state();
-  var xs = botX._state();
+  var ys = botY._state;
+  var xs = botX._state;
   console.log(ys);
   console.log(xs);
 
-  assert.deepEqual(xs, ys);
+  console.log("botY host %s", botY._state.get(botY.sessionId, "host"));
+  console.log("botY port %s", botY._state.get(botY.sessionId, "port"));
+
+  console.log("botX host %s", botX._state.get(botX.sessionId, "host"));
+  console.log("botX port %s", botX._state.get(botX.sessionId, "port"));
+  //assert.deepEqual(xs, ys);
 
   botX.close();
   botY.close();
