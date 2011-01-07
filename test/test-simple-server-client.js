@@ -21,7 +21,8 @@ botX.on('peerConnect', function (peer) {
 botX.on('listening', function () {
   botY = botnet.createBot(__dirname + '/keys/agent1-keys');
 
-  botY.connect(botnet.defaultPort, function (peer) {
+  botY.connect(botnet.defaultPort, function (err, peer) {
+    if (err) throw err;
     console.log("connected: %d", peer.sessionId);
     peer.send({ msg: "hello world" });
     console.error("message sent");
