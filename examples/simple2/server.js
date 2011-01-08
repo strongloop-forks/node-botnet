@@ -10,6 +10,6 @@ bot.on('peerConnect', function (peer) {
   console.error("someone connected");
 });
 
-bot.on('peerDisconnect', function (peer) {
+bot.on('part', function (peer) {
   console.error("someone disconnected");
 });
