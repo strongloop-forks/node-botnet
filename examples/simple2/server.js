@@ -7,9 +7,9 @@ bot.on('message', function (message, peer) {
 
 
 bot.on('peerConnect', function (peer) {
-  console.error("someone connected");
+  console.error("%d connected", peer.sessionId);
 });
 
-bot.on('part', function (peer) {
-  console.error("someone disconnected");
+bot.on('part', function (b) {
+  console.error("%d disconnected", b.sessionId);
 });

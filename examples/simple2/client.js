@@ -11,3 +11,11 @@ bot.connect(function (err, peer) {
 bot.on('message', function (message, peer) {
   console.error("msg: %j", message);
 });
+
+bot.on('peerConnect', function (peer) {
+  console.error("%d connected", peer.sessionId);
+});
+
+bot.on('part', function (b) {
+  console.error("%d disconnected", b.sessionId);
+});
